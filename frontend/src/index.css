@@ -1,0 +1,184 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  color-scheme: dark;
+  --scrollbar-color: #2e2e2e;
+}
+
+html { font-size: 14px; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #141414;
+  color: #e5e5e5;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Custom scrollbars ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2e2e2e; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3e3e3e; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ── Focus ring ───────────────────────────────────────────────────────────── */
+:focus-visible { outline: 2px solid #4f8ef7; outline-offset: 2px; }
+
+/* ── Selection ────────────────────────────────────────────────────────────── */
+::selection { background: rgba(79, 142, 247, 0.25); }
+
+/* ── Input range styling ──────────────────────────────────────────────────── */
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #2e2e2e;
+  border-radius: 3px;
+  outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #4f8ef7;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+input[type=range]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px rgba(79,142,247,0.2);
+}
+
+/* ── Utilities ────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .text-2xs { font-size: 0.625rem; line-height: 0.875rem; }
+
+  .panel {
+    @apply bg-editor-panel border border-editor-border rounded-xl;
+  }
+
+  .surface {
+    @apply bg-editor-surface border border-editor-border rounded-lg;
+  }
+
+  .clip-block {
+    @apply rounded select-none cursor-grab active:cursor-grabbing;
+  }
+
+  .truncate-fade {
+    -webkit-mask-image: linear-gradient(to right, black 80%, transparent 100%);
+    mask-image: linear-gradient(to right, black 80%, transparent 100%);
+  }
+
+  /* Glass morphism */
+  .glass {
+    background: rgba(37, 37, 37, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* ── Timeline track ───────────────────────────────────────────────────────── */
+.timeline-track {
+  position: relative;
+  min-height: 72px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 99px,
+      rgba(46,46,46,0.6) 99px,
+      rgba(46,46,46,0.6) 100px
+    );
+}
+
+/* ── Score ring ───────────────────────────────────────────────────────────── */
+.score-ring {
+  stroke-dasharray: 94.25;
+  stroke-dashoffset: 0;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── Upload dropzone ──────────────────────────────────────────────────────── */
+.dropzone-active {
+  background: rgba(79, 142, 247, 0.05);
+  border-color: #4f8ef7 !important;
+  box-shadow:
+    0 0 0 1px rgba(79, 142, 247, 0.4),
+    inset 0 0 60px rgba(79, 142, 247, 0.04);
+}
+
+/* ── Progress bar shimmer ─────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.progress-shimmer {
+  background: linear-gradient(
+    90deg,
+    #4f8ef7 0%,
+    #7ab0ff 35%,
+    #4f8ef7 60%,
+    #4f8ef7 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* ── Waveform bars animation ──────────────────────────────────────────────── */
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.4); }
+  50%       { transform: scaleY(1); }
+}
+
+.wave-bar {
+  animation: wave 1s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+/* ── Glow effects ─────────────────────────────────────────────────────────── */
+.glow-accent  { box-shadow: 0 0 12px rgba(79, 142, 247, 0.4); }
+.glow-success { box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);  }
+.glow-danger  { box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);  }
+
+/* ── Nav active indicator ─────────────────────────────────────────────────── */
+.nav-active-glow {
+  box-shadow: inset 0 0 0 1px rgba(79, 142, 247, 0.3), 0 0 8px rgba(79, 142, 247, 0.1);
+}
+
+/* ── Clip block hover ─────────────────────────────────────────────────────── */
+.clip-block:hover {
+  filter: brightness(1.08);
+}
+
+/* ── Timeline ruler tick ──────────────────────────────────────────────────── */
+.timeline-tick {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── Frosted overlay ──────────────────────────────────────────────────────── */
+.frosted-overlay {
+  background: linear-gradient(135deg, rgba(37,37,37,0.85), rgba(20,20,20,0.95));
+  backdrop-filter: blur(8px);
+}

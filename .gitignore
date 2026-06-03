@@ -1,0 +1,38 @@
+# Virtual environment
+venv/
+.venv/
+ENV/
+
+# Python caching
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Frontend dependencies and builds
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# Storage and uploads
+storage/
+*.db
+*.db-journal
+*.sqlite3
+
+# External libraries / large downloads
+ffmpeg.zip
+ffmpeg_unzipped/
+*.mp4
+*.xml
+
+# Environment files containing secrets
+.env
+.env.*
+!.env.example
+
+# IDEs/System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
