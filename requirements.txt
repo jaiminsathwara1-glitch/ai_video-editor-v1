@@ -23,16 +23,17 @@ imageio==2.34.1
 imageio-ffmpeg==0.4.9
 
 # ─── AI / ML ──────────────────────────────────────────────────────────────────
-openai-whisper==20231117
-torch==2.3.0                    # CPU build; swap for +cu121 for GPU
+openai-whisper==20250625
+torch==2.12.0                    # CPU build; swap for +cu121 for GPU
 torchvision==0.18.0
 numpy==1.26.4
 scipy==1.13.0
 scikit-learn==1.4.2
 Pillow==10.3.0
+sentence-transformers==5.5.1
 
 # ─── OpenTimelineIO (XML / EDL export) ────────────────────────────────────────
-OpenTimelineIO==0.16.0
+OpenTimelineIO==0.18.1
 
 # ─── FFmpeg wrapper ───────────────────────────────────────────────────────────
 ffmpeg-python==0.2.0
