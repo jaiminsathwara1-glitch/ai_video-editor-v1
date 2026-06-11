@@ -37,8 +37,34 @@ def detect_scenes(
 
     file_path = Path(file_path)
 
+    # OpenCV struggles massively to decode 4K HEVC on Windows.
+    # To fix this, we generate a fast 480p proxy video using ffmpeg and run scene detection on that.
+    import tempfile
+    import subprocess
+    from app.config import get_settings
+    settings = get_settings()
+
+    with tempfile.NamedTemporaryFile(suffix=".mp4", dir=settings.temp_dir, delete=False) as tmp:
+        proxy_path = Path(tmp.name)
+
+    # Generate 480p proxy (fastest possible settings)
+    cmd = [
+        settings.ffmpeg_path,
+        "-i", str(file_path),
+        "-vf", "scale=-2:480",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "28",
+        "-an",  # no audio
+        "-y",
+        str(proxy_path),
+    ]
+    
+    scenes: list[dict[str, Any]] = []
     try:
-        video = open_video(str(file_path))
+        subprocess.run(cmd, capture_output=True, check=True, timeout=120)
+
+        video = open_video(str(proxy_path))
         scene_manager = SceneManager()
         # AdaptiveDetector is faster than ContentDetector on most clips
         try:
@@ -51,9 +77,18 @@ def detect_scenes(
         scene_list = scene_manager.get_scene_list()
     except Exception as exc:
         log.warning("scene_detect_failed", path=str(file_path), error=str(exc))
-        return []
+        scene_list = []
+    finally:
+        try:
+            if 'video' in locals():
+                try:
+                    video.capture.release()
+                except Exception:
+                    pass
+            proxy_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
-    scenes: list[dict[str, Any]] = []
     for idx, (start, end) in enumerate(scene_list):
         start_s = start.get_seconds()
         end_s = end.get_seconds()

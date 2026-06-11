@@ -21,6 +21,7 @@ router = APIRouter(prefix="/analysis", tags=["Analysis"])
 @router.post("/clip/{clip_id}/start", status_code=status.HTTP_202_ACCEPTED)
 async def start_clip_analysis(
     clip_id: str,
+    analysis_mode: str = "gemini",
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Dispatch analysis task for one clip."""
@@ -28,14 +29,14 @@ async def start_clip_analysis(
     clip = result.scalar_one_or_none()
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
-    if clip.status not in ("uploaded", "error", "analysing"):
+    if clip.status not in ("uploaded", "error", "analysing", "analysed"):
         raise HTTPException(
             status_code=400,
-            detail=f"Clip is in state '{clip.status}'. Must be 'uploaded', 'error', or 'analysing' to start analysis.",
+            detail=f"Clip is in state '{clip.status}'. Must be 'uploaded', 'error', 'analysing', or 'analysed' to start analysis.",
         )
 
     from app.workers.analysis_tasks import analyse_clip
-    task = analyse_clip.apply_async(args=[clip_id])
+    task = analyse_clip.apply_async(args=[clip_id], kwargs={"analysis_mode": analysis_mode})
 
     clip.analysis_task_id = task.id
     clip.status = "analysing"
@@ -44,16 +45,18 @@ async def start_clip_analysis(
     return {"clip_id": clip_id, "task_id": task.id, "status": "queued"}
 
 
+
 # ── Start analysis for all clips in a project ─────────────────────────────────
 
 @router.post("/project/{project_id}/start", status_code=status.HTTP_202_ACCEPTED)
 async def start_project_analysis(
     project_id: str,
+    analysis_mode: str = "gemini",
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Dispatch analysis for all uploaded clips in a project."""
     from app.workers.analysis_tasks import analyse_project
-    task = analyse_project.apply_async(args=[project_id])
+    task = analyse_project.apply_async(args=[project_id], kwargs={"analysis_mode": analysis_mode})
     return {"project_id": project_id, "task_id": task.id, "status": "queued"}
 
 

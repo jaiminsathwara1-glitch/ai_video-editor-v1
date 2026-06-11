@@ -12,6 +12,12 @@ class ClipUploadInit(BaseModel):
     total_chunks: int = Field(..., gt=0)
 
 
+class ClipUrlUpload(BaseModel):
+    """Client sends this to upload a video via URL."""
+    project_id: str
+    url: str
+
+
 class ChunkUploadResponse(BaseModel):
     clip_id: str
     chunk_index: int

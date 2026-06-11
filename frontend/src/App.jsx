@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from '@/components/layout/Layout'
 import HomePage from '@/pages/HomePage'
+import SearchPage from '@/pages/SearchPage'
 import UploadPage from '@/pages/UploadPage'
 import ProcessingPage from '@/pages/ProcessingPage'
 import ClipsPage from '@/pages/ClipsPage'
@@ -13,6 +14,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<HomePage />} />
+          <Route path="search" element={<SearchPage />} />
           <Route path="upload" element={<UploadPage />} />
           <Route path="project/:projectId/processing" element={<ProcessingPage />} />
           <Route path="project/:projectId/clips" element={<ClipsPage />} />

@@ -7,6 +7,8 @@ export const clipsApi = {
   get:        (id)                => client.get(`/clips/${id}`).then(r => r.data),
   delete:     (id)                => client.delete(`/clips/${id}`),
   remove:     (id)                => client.delete(`/clips/${id}`),
+  searchGlobal: (query, topK = 12) => client.get('/clips/search/global', { params: { q: query, top_k: topK } }).then(r => r.data),
+  uploadUrl:  (projectId, url) => client.post('/clips/upload/url', { project_id: projectId, url }).then(r => r.data),
 
   /** Initialise a chunked upload session */
   initChunked: (body) =>

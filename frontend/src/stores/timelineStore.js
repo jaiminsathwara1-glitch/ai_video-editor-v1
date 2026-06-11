@@ -16,12 +16,17 @@ export const useTimelineStore = create((set, get) => ({
   setTimeline: (timeline) =>
     set({
       timelineId: timeline.id,
-      entries: (timeline.entries || []).map((e) => ({
-        ...e,
-        locked: false,
-        approved: false,
-        rejected: false,
-      })),
+      // Sort by `order` here as a safety net — the API schema validator also
+      // sorts, but guarding here ensures any stale or manually-reordered data
+      // from a previous session doesn't render clips in the wrong sequence.
+      entries: [...(timeline.entries || [])]
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .map((e) => ({
+          ...e,
+          locked: false,
+          approved: false,
+          rejected: false,
+        })),
       isDirty: false,
     }),
 

@@ -57,12 +57,12 @@ def get_sync_db() -> Session:
     default_retry_delay=30,
     queue="analysis",
 )
-def analyse_clip(self, clip_id: str) -> dict:
+def analyse_clip(self, clip_id: str, analysis_mode: str = "gemini") -> dict:
     """
     Full analysis pipeline for a single clip.
-    Called by the API after upload completes.
+    Called by the API after upload completes, or when re-analysing with a different mode.
     """
-    log.info("analyse_clip_start", clip_id=clip_id, task_id=self.request.id)
+    log.info("analyse_clip_start", clip_id=clip_id, task_id=self.request.id, analysis_mode=analysis_mode)
     t_start = time.time()
 
     db = get_sync_db()
@@ -99,6 +99,8 @@ def analyse_clip(self, clip_id: str) -> dict:
         self.update_state(state="PROGRESS", meta={"step": "llm_tagging", "pct": 80})
         tag_meta = {
             **cv_result,
+            "clip_id": clip.id,
+            "project_id": clip.project_id,
             "duration": clip.duration,
             "width": clip.width,
             "height": clip.height,
@@ -106,8 +108,9 @@ def analyse_clip(self, clip_id: str) -> dict:
             "audio_codec": clip.audio_codec,
             "scene_count": len(scenes),
             "transcript": transcript_data.get("text", ""),
+            "filename": clip.original_filename,
         }
-        tag_result = tag_and_summarise(tag_meta)
+        tag_result = tag_and_summarise(tag_meta, analysis_mode=analysis_mode)
 
         # ── Step 5: Persist ───────────────────────────────────────────────────
         self.update_state(state="PROGRESS", meta={"step": "persisting", "pct": 95})
@@ -200,6 +203,9 @@ def analyse_clip(self, clip_id: str) -> dict:
             "duration_s": elapsed,
         }
 
+    except Ignore:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
         import traceback
@@ -225,7 +231,7 @@ def analyse_clip(self, clip_id: str) -> dict:
     name="app.workers.analysis_tasks.analyse_project",
     queue="analysis",
 )
-def analyse_project(self, project_id: str) -> dict:
+def analyse_project(self, project_id: str, analysis_mode: str = "gemini") -> dict:
     """
     Trigger analysis for all uploaded clips in a project.
     Returns immediately; individual clip tasks run in parallel.
@@ -241,14 +247,16 @@ def analyse_project(self, project_id: str) -> dict:
             db.query(Clip)
             .filter(
                 Clip.project_id == project_id,
-                Clip.status.in_(["uploaded", "error", "analysing"])
+                # Include 'analysed' so re-analysis with a different mode always works.
+                # The task will overwrite existing ClipAnalysis rows.
+                Clip.status.in_(["uploaded", "error", "analysing", "analysed"])
             )
             .all()
         )
 
         task_ids = []
         for clip in clips:
-            task = analyse_clip.apply_async(args=[clip.id])
+            task = analyse_clip.apply_async(args=[clip.id], kwargs={"analysis_mode": analysis_mode})
             clip.analysis_task_id = task.id
             task_ids.append(task.id)
 

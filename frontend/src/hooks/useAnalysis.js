@@ -31,7 +31,7 @@ export const useTaskStatus = (taskId, { enabled = true, refetchInterval } = {}) 
 export const useStartProjectAnalysis = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: analysisApi.startProject,
+    mutationFn: ({ projectId, analysisMode = 'gemini' }) => analysisApi.startProject(projectId, analysisMode),
     onSuccess: (data) => {
       toast.success(`Analysis started for ${data.dispatched ?? 0} clips`)
       qc.invalidateQueries({ queryKey: ['clips'] })

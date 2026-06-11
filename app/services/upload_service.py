@@ -14,10 +14,16 @@ from typing import AsyncIterator
 
 import aiofiles
 import structlog
+import httpx
+import zipfile
+import tempfile
+import os
+from urllib.parse import urlparse
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.database import AsyncSessionLocal
 from app.config import get_settings
 from app.models.clip import Clip, ClipChunk
 from app.services.ffmpeg_utils import extract_metadata_async, generate_thumbnails_async
@@ -141,6 +147,149 @@ async def receive_simple_upload(
     clip.file_path = str(dest_path)
     clip.file_size = size
 
+    await _finalize_clip(db, clip)
+    return clip
+
+
+# ─── URL upload ───────────────────────────────────────────────────────────────
+
+async def receive_url_upload(
+    db: AsyncSession,
+    project_id: str,
+    url: str,
+    placeholder_clip: Clip | None = None,
+) -> list[Clip]:
+    """Download a video file (or a ZIP folder of videos) from a URL directly to disk."""
+    if "dropbox.com" in url and "dl=0" in url:
+        url = url.replace("dl=0", "dl=1")
+        
+    parsed = urlparse(url)
+    filename = parsed.path.split("/")[-1]
+    if not filename or '.' not in filename:
+        filename = "download.zip" if "dropbox.com" in url else "downloaded_video.mp4"
+
+    # Download to a temporary file first
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".tmp", dir=settings.temp_dir) as tmp_file:
+        tmp_path = Path(tmp_file.name)
+
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(60.0)) as client:
+            async with client.stream("GET", url) as response:
+                response.raise_for_status()
+                # Check if the server says it's a zip
+                content_type = response.headers.get("content-type", "")
+                total_size = int(response.headers.get("content-length", 0))
+                
+                if "application/zip" in content_type and not filename.endswith(".zip"):
+                    filename += ".zip"
+                
+                async with aiofiles.open(tmp_path, "wb") as out:
+                    size = 0
+                    last_update_size = 0
+                    async for chunk in response.aiter_bytes(chunk_size=1024*1024*8):
+                        if chunk:
+                            await out.write(chunk)
+                            size += len(chunk)
+                            if placeholder_clip and (size - last_update_size > 50_000_000):
+                                downloaded_mb = size // (1024 * 1024)
+                                if total_size > 0:
+                                    total_mb = total_size // (1024 * 1024)
+                                    placeholder_clip.original_filename = f"Downloading Archive... ({downloaded_mb}MB / {total_mb}MB)"
+                                else:
+                                    placeholder_clip.original_filename = f"Downloading Archive... ({downloaded_mb} MB)"
+                                await db.commit()
+                                last_update_size = size
+                                
+        if placeholder_clip:
+            placeholder_clip.original_filename = "Extracting Archive... Please wait."
+            await db.commit()
+            
+        # Now process the downloaded file
+        clips_created = []
+        
+        if filename.lower().endswith(".zip") or zipfile.is_zipfile(tmp_path):
+            # Extract ZIP
+            with tempfile.TemporaryDirectory(dir=settings.temp_dir) as extract_dir:
+                with zipfile.ZipFile(tmp_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_dir)
+                    
+                # Find all video files
+                valid_exts = {'.mp4', '.mov', '.avi', '.mkv', '.webm'}
+                for root, _, files in os.walk(extract_dir):
+                    for file in files:
+                        ext = Path(file).suffix.lower()
+                        if ext in valid_exts and not file.startswith('._'):
+                            extracted_path = Path(root) / file
+                            clip = await _create_clip_from_file(db, project_id, file, extracted_path)
+                            clips_created.append(clip)
+        else:
+            # Single video file
+            clip = await _create_clip_from_file(db, project_id, filename, tmp_path)
+            clips_created.append(clip)
+            
+        return clips_created
+        
+    except Exception as e:
+        log.error("url_download_failed", url=url, error=str(e))
+        raise
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+async def receive_url_upload_background(project_id: str, url: str) -> None:
+    """Wrapper to run URL upload in a FastAPI BackgroundTask with its own DB session."""
+    log.info("background_url_upload_started", url=url)
+    async with AsyncSessionLocal() as db:
+        # Create a placeholder clip so the user sees progress in the UI
+        placeholder = Clip(
+            project_id=project_id,
+            filename="Downloading Archive...",
+            original_filename="Downloading & Extracting Archive...",
+            mime_type="application/zip",
+            status="uploading",
+            file_path="",
+        )
+        db.add(placeholder)
+        await db.commit()
+        await db.refresh(placeholder)
+
+        try:
+            await receive_url_upload(db, project_id, url, placeholder_clip=placeholder)
+            log.info("background_url_upload_finished", url=url)
+            # Remove placeholder and commit the real clips
+            await db.delete(placeholder)
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            placeholder.status = "error"
+            db.add(placeholder)
+            await db.commit()
+            log.error("background_url_upload_error", url=url, error=str(e))
+
+
+async def _create_clip_from_file(db: AsyncSession, project_id: str, original_filename: str, source_path: Path) -> Clip:
+    """Helper to move a file to the project folder and create a Clip."""
+    clip = Clip(
+        project_id=project_id,
+        filename=original_filename,
+        original_filename=original_filename,
+        file_path="",
+        mime_type="video/mp4",
+        status="uploading",
+    )
+    db.add(clip)
+    await db.flush()
+
+    dest_path = settings.upload_dir / project_id / f"{clip.id}_{original_filename}"
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Move or copy file
+    import shutil
+    shutil.copy2(source_path, dest_path)
+    
+    clip.file_path = str(dest_path)
+    clip.file_size = dest_path.stat().st_size
+    
     await _finalize_clip(db, clip)
     return clip
 

@@ -244,6 +244,10 @@ export default function ProcessingPage() {
   const startAnalysis    = useStartProjectAnalysis()
   const detectDuplicates = useDetectDuplicates()
   const [analysisTaskId, setAnalysisTaskId] = useState(null)
+  const [useVision, setUseVision] = useState(true)
+  const [analysisMode, setAnalysisMode] = useState(() => {
+    return localStorage.getItem('cutai_analysis_mode') || 'gemini'
+  })
   const { data: taskStatus } = useTaskStatus(analysisTaskId)
 
   // Real-time socket updates
@@ -272,7 +276,7 @@ export default function ProcessingPage() {
       toast.error('Analysis worker is offline! Restart it first (see the red banner above).', { duration: 6000 })
       return
     }
-    const result = await startAnalysis.mutateAsync(projectId)
+    const result = await startAnalysis.mutateAsync({ projectId, analysisMode })
     if (result?.task_id) setAnalysisTaskId(result.task_id)
   }
 
@@ -331,7 +335,24 @@ export default function ProcessingPage() {
             </span>
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <div className="flex items-center gap-2 mr-2">
+            <span className="text-xs text-white/70">Analysis Mode:</span>
+            <select
+              value={analysisMode}
+              onChange={(e) => {
+                const val = e.target.value
+                setAnalysisMode(val)
+                localStorage.setItem('cutai_analysis_mode', val)
+              }}
+              className="bg-editor-active text-white text-xs rounded border border-white/10 px-2 py-1 outline-none focus:border-accent"
+            >
+              <option value="gemini">Gemini (Vision)</option>
+              <option value="groq_vision">Groq (Vision)</option>
+              <option value="groq">Groq / OpenAI (Text)</option>
+              <option value="rule_based">Rule-Based (Fast)</option>
+            </select>
+          </div>
           <Button variant="outline" size="sm" onClick={() => refetch()}>
             <RefreshCw size={12} /> Refresh
           </Button>

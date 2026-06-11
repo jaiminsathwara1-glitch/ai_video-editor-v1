@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Play, ChevronRight, Zap, CheckCircle2,
-  Clock, Film, HardDrive, Cpu, Sparkles
+  Clock, Film, HardDrive, Cpu, Sparkles, Link
 } from 'lucide-react'
 import { useUploadStore } from '@/stores/uploadStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -41,8 +41,9 @@ export default function UploadPage() {
 
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
+  const [url, setUrl] = useState('')
 
-  const { enqueue, startAll, isUploading, uploads, setProject, doneCount } = useUploadStore()
+  const { enqueue, startAll, uploadFromUrl, isUploading, uploads, setProject, doneCount } = useUploadStore()
 
   // Prefer ?project= URL param, then persisted store value
   const paramId    = params.get('project')
@@ -81,6 +82,19 @@ export default function UploadPage() {
     e.preventDefault()
     if (!name.trim()) return
     createProject.mutate({ name: name.trim(), description: desc.trim() })
+  }
+
+  async function handleUrlSubmit(e) {
+    e.preventDefault()
+    if (!url.trim()) return
+    const submittedUrl = url.trim()
+    setUrl('')
+    try {
+      await uploadFromUrl(submittedUrl)
+      navigate(`/project/${activeProjectId}/processing`)
+    } catch (err) {
+      // Error is handled by store toast
+    }
   }
 
   // ── Loading state ─────────────────────────────────────────────────────────────
@@ -203,6 +217,26 @@ export default function UploadPage() {
       {/* Drop zone */}
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
         <DropZone onFiles={enqueue} disabled={isUploading} />
+        
+        {/* URL Upload */}
+        <form onSubmit={handleUrlSubmit} className="mt-4 flex items-center gap-2">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Link size={14} className="text-white/40" />
+            </div>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Or paste a video URL here..."
+              disabled={isUploading}
+              className="w-full bg-editor-bg border border-editor-border rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-white/20 focus:border-accent focus:outline-none transition-colors"
+            />
+          </div>
+          <Button variant="outline" type="submit" disabled={!url.trim() || isUploading}>
+            Upload URL
+          </Button>
+        </form>
       </motion.div>
 
       {/* Overall progress */}

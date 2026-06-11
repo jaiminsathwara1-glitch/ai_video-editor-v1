@@ -50,6 +50,22 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     whisper_model: str = "base"
 
+    # ── Gemini Vision ────────────────────────────────────────────────────────
+    gemini_api_key: str = ""
+    gemini_base_url: str = ""
+    gemini_model: str = "gemini-3.5-flash"
+
+    # ── Groq Vision (used by "Groq (Vision)" analysis mode) ──────────────────
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_model: str = "llama-3.2-11b-vision-preview"
+
+    # ── Groq Text (used by "Groq / OpenAI (Text)" analysis mode) ─────────────
+    # If groq_text_api_key is empty, falls back to groq_api_key / groq_base_url.
+    groq_text_api_key: str = ""
+    groq_text_base_url: str = ""          # empty = same as groq_base_url
+    groq_text_model: str = "llama-3.3-70b-versatile"
+
     # ── Thumbnails ────────────────────────────────────────────────────────────
     thumbnail_width: int = 320
     thumbnail_height: int = 180

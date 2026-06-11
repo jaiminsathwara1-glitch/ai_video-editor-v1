@@ -3,14 +3,14 @@ Clips router — upload (chunked & simple), metadata, list.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
 from app.models.clip import Clip
-from app.schemas.clip import ClipRead, ClipUploadInit, ChunkUploadResponse
-from app.services.upload_service import init_upload, receive_chunk, receive_simple_upload
+from app.schemas.clip import ClipRead, ClipUploadInit, ChunkUploadResponse, ClipUrlUpload
+from app.services.upload_service import init_upload, receive_chunk, receive_simple_upload, receive_url_upload
 
 router = APIRouter(prefix="/clips", tags=["Clips"])
 
@@ -71,7 +71,68 @@ async def simple_upload(
     return ClipRead.model_validate(clip)
 
 
-# ── 4. List clips in project ──────────────────────────────────────────────────
+@router.post("/upload/url", response_model=list[ClipRead], status_code=status.HTTP_202_ACCEPTED)
+async def url_upload(
+    body: ClipUrlUpload,
+    background_tasks: BackgroundTasks,
+) -> list[ClipRead]:
+    """Queue a download and upload a video file (or a folder ZIP) from a given URL in the background."""
+    from app.services.upload_service import receive_url_upload_background
+    background_tasks.add_task(receive_url_upload_background, body.project_id, body.url)
+    return []
+
+
+# ── 4. Global AI Search ────────────────────────────────────────────────────────
+
+from app.ai.search import semantic_search_clips
+
+@router.get("/search/global")
+async def global_search_clips(
+    q: str,
+    top_k: int = 12,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Search for clips using natural language semantics across all projects.
+    Returns the top matching clips based on vector embeddings, including their analysis.
+    """
+    if not q:
+        return []
+    results = await semantic_search_clips(db, q, top_k)
+    
+    out = []
+    for item in results:
+        clip = item["clip"]
+        score = item["score"]
+        analysis = clip.analysis
+        
+        # Serialize the clip
+        clip_dict = ClipRead.model_validate(clip).model_dump(mode='json')
+        
+        # Include necessary analysis fields for the frontend
+        analysis_dict = {}
+        if analysis:
+            analysis_dict = {
+                "tags": analysis.tags or [],
+                "summary": analysis.summary or "",
+                "overall_score": analysis.overall_score,
+                "is_blurry": analysis.is_blurry,
+                "is_shaky": analysis.is_shaky,
+                "is_overexposed": analysis.is_overexposed,
+                "is_underexposed": analysis.is_underexposed,
+                "has_duplicate": analysis.has_duplicate
+            }
+            
+        out.append({
+            "clip": clip_dict,
+            "analysis": analysis_dict,
+            "search_score": score
+        })
+        
+    return out
+
+
+# ── 5. List clips in project ──────────────────────────────────────────────────
 
 @router.get("/project/{project_id}", response_model=list[ClipRead])
 async def list_clips(

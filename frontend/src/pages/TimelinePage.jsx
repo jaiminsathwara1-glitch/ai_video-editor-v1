@@ -42,6 +42,9 @@ export default function TimelinePage() {
 
   const [minScore, setMinScore]           = useState(3)
   const [targetDuration, setTargetDuration] = useState('')
+  const [analysisMode, setAnalysisMode] = useState(() => {
+    return localStorage.getItem('cutai_analysis_mode') || 'gemini'
+  })
 
   const selectedEntry = entries.find(e => e.clip_id === selectedEntryId)
 
@@ -65,6 +68,7 @@ export default function TimelinePage() {
       name:            'Rough Cut',
       min_score:       minScore,
       target_duration: targetDuration ? Number(targetDuration) : null,
+      analysis_mode:   analysisMode,
     })
   }
 
@@ -128,7 +132,7 @@ export default function TimelinePage() {
               id="ai-reorder-btn"
               size="sm"
               variant="outline"
-              onClick={() => currentTimeline?.id && reorderTimeline.mutate(currentTimeline.id)}
+              onClick={() => currentTimeline?.id && reorderTimeline.mutate({ timelineId: currentTimeline.id, analysisMode })}
               loading={reorderTimeline.isPending}
               title="Ask Groq AI to suggest the best order for your clips"
               className="border-accent/40 text-accent hover:bg-accent/10"
@@ -178,6 +182,24 @@ export default function TimelinePage() {
                 onChange={e => setTargetDuration(e.target.value)}
                 className="w-full bg-editor-active border border-editor-border rounded-md px-2.5 py-1.5 text-xs text-white placeholder-white/25 focus:outline-none focus:border-accent"
               />
+            </div>
+
+            <div>
+              <label className="text-xs text-white/50 block mb-1.5">Sequencing Model</label>
+              <select
+                value={analysisMode}
+                onChange={e => {
+                  const val = e.target.value
+                  setAnalysisMode(val)
+                  localStorage.setItem('cutai_analysis_mode', val)
+                }}
+                className="w-full bg-editor-active border border-editor-border rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-accent"
+              >
+                <option value="gemini">Gemini (Vision)</option>
+                <option value="groq_vision">Groq (Vision)</option>
+                <option value="groq">Groq / OpenAI (Text)</option>
+                <option value="rule_based">Rule-Based (Fast)</option>
+              </select>
             </div>
 
             <Button size="sm" className="w-full" onClick={handleGenerate} loading={generateTimeline.isPending}>

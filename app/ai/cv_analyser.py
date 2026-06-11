@@ -68,7 +68,7 @@ def analyse_clip_cv(file_path: str | Path, clip_id: str) -> dict[str, Any]:
     file_path = Path(file_path)
     log.info("cv_analysis_start", clip_id=clip_id, n_frames=N_ANALYSIS_FRAMES)
 
-    gray_frames, color_frames = _extract_frames(file_path, clip_id)
+    gray_frames = _extract_frames(file_path, clip_id)
     if not gray_frames:
         log.warning("no_frames_extracted", clip_id=clip_id)
         return _empty_result()
@@ -119,7 +119,7 @@ def analyse_clip_cv(file_path: str | Path, clip_id: str) -> dict[str, Any]:
     block_norm  = float(np.clip(10.0 - (block_mean / BLOCK_SCORE_MAX) * 10.0, 0.0, 10.0))
 
     mean_lum    = float(np.mean(lum_arr)) if lum_arr.size else 128.0
-    expose_norm = float(10.0 * math.exp(-((mean_lum - 128) ** 2) / (2 * 70 ** 2)))
+    expose_norm = 10.0 * math.exp(-((mean_lum - 128) ** 2) / (2 * 70 ** 2))
 
     motion_raw  = float(np.mean(diff_arr)) if diff_arr.size else 0.0
     motion_norm = float(np.clip(motion_raw / 5.0, 0.0, 10.0))
@@ -187,49 +187,38 @@ def analyse_clip_cv(file_path: str | Path, clip_id: str) -> dict[str, Any]:
 
 def _extract_frames(
     file_path: Path, clip_id: str
-) -> tuple[list[np.ndarray], list[np.ndarray]]:
+) -> list[np.ndarray]:
     """
     Extract N_ANALYSIS_FRAMES uniformly-spaced frames.
-    Returns (gray_frames, color_frames). Falls back to ffmpeg on failure.
+    Uses ffmpeg to extract frames to disk, reads them, and cleans up.
     """
-    cap    = cv2.VideoCapture(str(file_path))
-    opened = cap.isOpened()
-    total  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if opened else 0
-
     gray_frames:  list[np.ndarray] = []
-    color_frames: list[np.ndarray] = []
+    max_dim = 1280
 
-    if opened and total > 2:
-        indices = np.linspace(0, total - 2, N_ANALYSIS_FRAMES, dtype=int)
-        for idx in indices:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
-            ret, frame = cap.read()
-            if not ret or frame is None:
-                continue
-            color_frames.append(frame)
-            gray_frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
-    cap.release()
+    def _process_frame(f: np.ndarray) -> np.ndarray:
+        h, w = f.shape[:2]
+        if max(h, w) > max_dim:
+            scale = max_dim / max(h, w)
+            f = cv2.resize(f, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        return cv2.cvtColor(f, cv2.COLOR_BGR2GRAY)
 
-    # Fallback: disk-based extraction via ffmpeg
-    if not gray_frames:
-        log.info("cv_ffmpeg_fallback", clip_id=clip_id)
-        disk_frames = extract_frames_uniform(file_path, n_frames=N_ANALYSIS_FRAMES)
-        for f in disk_frames:
-            img = cv2.imread(str(f))
-            if img is not None:
-                color_frames.append(img)
-                gray_frames.append(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
-            try:
-                f.unlink(missing_ok=True)
-            except OSError:
-                pass
-        if disk_frames:
-            try:
-                disk_frames[0].parent.rmdir()
-            except OSError:
-                pass
+    log.info("cv_ffmpeg_extraction", clip_id=clip_id)
+    disk_frames = extract_frames_uniform(file_path, n_frames=N_ANALYSIS_FRAMES)
+    for f in disk_frames:
+        img = cv2.imread(str(f))
+        if img is not None:
+            gray_frames.append(_process_frame(img))
+        try:
+            f.unlink(missing_ok=True)
+        except OSError:
+            pass
+    if disk_frames:
+        try:
+            disk_frames[0].parent.rmdir()
+        except OSError:
+            pass
 
-    return gray_frames, color_frames
+    return gray_frames
 
 
 # ─── 1. Blur (Laplacian + Tenengrad) ─────────────────────────────────────────
@@ -239,9 +228,15 @@ def _per_frame_blur(gray_frames: list[np.ndarray]) -> list[float]:
     if not gray_frames:
         return []
     lap = np.array([cv2.Laplacian(f, cv2.CV_64F).var() for f in gray_frames])
-    gx  = [cv2.Sobel(f, cv2.CV_64F, 1, 0, ksize=3) for f in gray_frames]
-    gy  = [cv2.Sobel(f, cv2.CV_64F, 0, 1, ksize=3) for f in gray_frames]
-    ten = np.array([float(np.mean(gx[i]**2 + gy[i]**2)) for i in range(len(gray_frames))])
+    
+    # Process Sobel filters frame-by-frame to avoid storing all float64 filtered frames in RAM
+    ten_list = []
+    for f in gray_frames:
+        gx = cv2.Sobel(f, cv2.CV_64F, 1, 0, ksize=3)
+        gy = cv2.Sobel(f, cv2.CV_64F, 0, 1, ksize=3)
+        ten_val = float(np.mean(gx**2 + gy**2))
+        ten_list.append(ten_val)
+    ten = np.array(ten_list)
 
     def _norm01(arr: np.ndarray) -> np.ndarray:
         lo, hi = arr.min(), arr.max()
@@ -271,7 +266,7 @@ def _phase_corr(prev: np.ndarray, curr: np.ndarray) -> tuple[float, float]:
         prev.astype(np.float64) * win,
         curr.astype(np.float64) * win,
     )
-    return float(dx), float(dy)
+    return dx, dy
 
 
 def _per_frame_jitter(gray_frames: list[np.ndarray]) -> list[float]:
@@ -494,7 +489,7 @@ def _exposure_score(gray_frames: list[np.ndarray]) -> tuple[float, bool, bool]:
     is_over  = mean_lum > EXPOSE_HIGH
     is_under = mean_lum < EXPOSE_LOW
     score    = 10.0 * math.exp(-((mean_lum - 128) ** 2) / (2 * 70 ** 2))
-    return round(float(score), 2), is_over, is_under
+    return round(score, 2), is_over, is_under
 
 
 # ─── Duration helper ──────────────────────────────────────────────────────────

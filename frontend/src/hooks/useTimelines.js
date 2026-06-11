@@ -34,7 +34,7 @@ export const useGenerateTimeline = () => {
 export const useReorderTimeline = () => {
   const setTimeline = useTimelineStore((s) => s.setTimeline)
   return useMutation({
-    mutationFn: (id) => timelinesApi.reorder(id),
+    mutationFn: ({ timelineId, analysisMode }) => timelinesApi.reorder(timelineId, analysisMode),
     onSuccess: (timeline) => {
       setTimeline(timeline)
       toast.success('Clips reordered by AI ✨')

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
-from pydantic import BaseModel, Field
+from typing import Any
+from pydantic import BaseModel, Field, model_validator
 
 
 class TimelineEntry(BaseModel):
@@ -18,6 +19,7 @@ class TimelineCreate(BaseModel):
     name: str = "Rough Cut"
     min_score: float = Field(default=0.0, ge=0, le=10)   # 0 = include all stable clips
     target_duration: float | None = None  # seconds; None = use all good clips
+    analysis_mode: str = "gemini"
 
 
 class TimelineRead(BaseModel):
@@ -35,3 +37,11 @@ class TimelineRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def sort_entries_by_order(self) -> "TimelineRead":
+        """Always return entries sorted by order so the frontend receives
+        the correct 7-step sequence regardless of DB storage order."""
+        if self.entries:
+            self.entries = sorted(self.entries, key=lambda e: e.order)
+        return self

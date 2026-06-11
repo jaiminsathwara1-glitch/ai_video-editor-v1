@@ -2,7 +2,7 @@ import { NavLink, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Film, Upload, Cpu, LayoutGrid, Scissors,
-  Download, Zap, ChevronRight
+  Download, Zap, ChevronRight, Search
 } from 'lucide-react'
 import { useProjectSocket } from '@/hooks/useSocket'
 import { useProject } from '@/hooks/useProjects'
@@ -10,6 +10,7 @@ import clsx from 'clsx'
 
 const globalLinks = [
   { to: '/', icon: LayoutGrid, label: 'Projects', end: true },
+  { to: '/search', icon: Search, label: 'AI Search' },
 ]
 
 function NavItem({ to, icon: Icon, label, end }) {

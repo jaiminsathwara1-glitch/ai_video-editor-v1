@@ -21,6 +21,7 @@ router = APIRouter(prefix="/timelines", tags=["Timelines"])
 @router.post("/{timeline_id}/reorder", response_model=TimelineRead)
 async def ai_reorder(
     timeline_id: str,
+    analysis_mode: str = "gemini",
     db: AsyncSession = Depends(get_db),
 ) -> TimelineRead:
     """
@@ -53,6 +54,7 @@ async def ai_reorder(
     meta_by_id = {
         clip.id: {
             "clip_id": clip.id,
+            "filename": clip.original_filename or "",   # key for room classification
             "duration": clip.duration,
             "fps": clip.fps,
             "width": clip.width,
@@ -79,7 +81,7 @@ async def ai_reorder(
     # Run AI sequencing
     import asyncio
     loop = asyncio.get_running_loop()
-    sequence = await loop.run_in_executor(None, suggest_sequence, clips_meta)
+    sequence = await loop.run_in_executor(None, suggest_sequence, clips_meta, analysis_mode)
 
     # Map the new AI order back onto the existing entries (preserving trim pts)
     order_map = {item["clip_id"]: item["order"] for item in sequence}
@@ -127,6 +129,7 @@ async def create_timeline(
             name=body.name,
             min_score=body.min_score,
             target_duration=body.target_duration,
+            analysis_mode=body.analysis_mode,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { clipsApi } from '@/api/clips'
+import toast from 'react-hot-toast'
 
 /**
  * Upload store — tracks all in-flight and completed uploads.
@@ -42,6 +43,18 @@ export const useUploadStore = create((set, get) => ({
     set((s) => ({
       uploads: s.uploads.map((u) => (u.id === localId ? { ...u, ...patch } : u)),
     })),
+
+  /** Add and instantly upload a file from a URL */
+  uploadFromUrl: async (url) => {
+    const { projectId } = get()
+    try {
+      await clipsApi.uploadUrl(projectId, url)
+      toast.success('Download queued in the background! It will automatically unpack large ZIP files. Check back later.')
+    } catch (err) {
+      toast.error('Failed to queue URL upload: ' + (err?.response?.data?.detail || err.message))
+      throw err
+    }
+  },
 
   /** Start uploading all queued files */
   startAll: async () => {

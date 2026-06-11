@@ -255,8 +255,10 @@ def main():
             t.start()
             threads.append(t)
             
-            # Brief delay to allow port binding and stagger startups
-            time.sleep(1.5)
+            # Stagger startups: give each service time to bind before the next starts.
+            # Backend needs ~3s to bind port + run DB lifespan init before Vite proxies to it.
+            delay = 3.0 if name == "Backend" else 1.5
+            time.sleep(delay)
 
         log("System", GREEN + BOLD + "All services are up and running! Press Ctrl+C to stop." + RESET)
         log("System", "  FastAPI Backend: http://localhost:8000")
